@@ -49,7 +49,7 @@ Directives
 
 **gridfs**
 
-:syntax: *gridfs DB_NAME [root_collection=ROOT] [field=QUERY_FIELD] [type=QUERY_TYPE] [user=USERNAME] [pass=PASSWORD]* 
+:syntax: *gridfs DB_NAME [root_collection=ROOT] [field=QUERY_FIELD] [type=QUERY_TYPE] [user=USERNAME] [pass=PASSWORD] [prefix=PREFIX]* 
 :default: *NONE*
 :context: location
 
@@ -61,6 +61,7 @@ only required parameter is DB_NAME to specify the database to serve files from.
 * *type=* specify the type to query. Supported types include *objectid*, *string* and *int*. default: *objectid*
 * *user=* specify a username if your mongo database requires authentication. default: *NULL*
 * *pass=* specify a password if your mongo database requires authentication. default: *NULL*
+* *prefix=* specify a prefix to be prepended to the query string. default: *NULL*
 
 **mongo**
 

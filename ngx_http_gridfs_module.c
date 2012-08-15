@@ -75,6 +75,7 @@ typedef struct {
     ngx_uint_t type;
     ngx_str_t user;
     ngx_str_t pass;
+    ngx_str_t prefix;
     ngx_str_t mongo;
     ngx_array_t* mongods; /* ngx_http_mongod_server_t */
     ngx_str_t replset; /* Name of the replica set, if connecting. */
@@ -287,6 +288,12 @@ static char* ngx_http_gridfs(ngx_conf_t* cf, ngx_command_t* command, void* void_
             continue;
         }
 
+        if (ngx_strncmp(value[i].data, "prefix=", 7) == 0) {
+            gridfs_loc_conf->prefix.data = (u_char *) &value[i].data[7];
+            gridfs_loc_conf->prefix.len = ngx_strlen(&value[i].data[7]);
+            continue;
+        }
+
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                            "invalid parameter \"%V\"", &value[i]);
         return NGX_CONF_ERROR;
@@ -311,6 +318,13 @@ static char* ngx_http_gridfs(ngx_conf_t* cf, ngx_command_t* command, void* void_
         && (gridfs_loc_conf->pass.data == NULL || gridfs_loc_conf->pass.len == 0)) {
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                            "Username without password");
+        return NGX_CONF_ERROR;
+    }
+
+    if ((gridfs_loc_conf->type != bson_string)
+        && (gridfs_loc_conf->prefix.data != NULL || gridfs_loc_conf->prefix.len != 0)) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "Prefix requires type=string");
         return NGX_CONF_ERROR;
     }
 
@@ -355,6 +369,8 @@ static void* ngx_http_gridfs_create_loc_conf(ngx_conf_t* directive) {
     gridfs_conf->user.len = 0;
     gridfs_conf->pass.data = NULL;
     gridfs_conf->pass.len = 0;
+    gridfs_conf->prefix.data = NULL;
+    gridfs_conf->prefix.len = 0;
     gridfs_conf->mongo.data = NULL;
     gridfs_conf->mongo.len = 0;
     gridfs_conf->mongods = NGX_CONF_UNSET_PTR;
@@ -375,6 +391,7 @@ static char* ngx_http_gridfs_merge_loc_conf(ngx_conf_t* cf, void* void_parent, v
     ngx_conf_merge_uint_value(child->type, parent->type, bson_oid);
     ngx_conf_merge_str_value(child->user, parent->user, NULL);
     ngx_conf_merge_str_value(child->pass, parent->pass, NULL);
+    ngx_conf_merge_str_value(child->prefix, parent->prefix, NULL);
     ngx_conf_merge_str_value(child->mongo, parent->mongo, "127.0.0.1:27017");
 
     if (child->mongods == NGX_CONF_UNSET_PTR) {
@@ -733,16 +750,17 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    value = (char*)malloc(sizeof(char) * (full_uri.len - location_name.len + 1));
+    value = (char*)malloc(sizeof(char) * (gridfs_conf->prefix.len + full_uri.len - location_name.len + 1));
     if (value == NULL) {
         ngx_log_error(NGX_LOG_ERR, request->connection->log, 0,
                       "Failed to allocate memory for value buffer.");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-    memcpy(value, full_uri.data + location_name.len, full_uri.len - location_name.len);
-    value[full_uri.len - location_name.len] = '\0';
+    memcpy(value, gridfs_conf->prefix.data, gridfs_conf->prefix.len);
+    memcpy(value + gridfs_conf->prefix.len, full_uri.data + location_name.len, full_uri.len - location_name.len);
+    value[gridfs_conf->prefix.len + full_uri.len - location_name.len] = '\0';
 
-    if (!url_decode(value)) {
+    if (!url_decode(value + gridfs_conf->prefix.len)) {
         ngx_log_error(NGX_LOG_ERR, request->connection->log, 0,
                       "Malformed request.");
         free(value);
